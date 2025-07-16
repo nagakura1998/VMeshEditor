@@ -17,6 +17,10 @@ interface MeshViewportProps {
   onMeshStatsChange: (stats: { vertices: number; faces: number }) => void;
 }
 
+import { OBJLoader } from "three-stdlib";
+import { STLLoader } from "three-stdlib";
+import { PLYLoader } from "three-stdlib";
+
 function ThreeScene({ meshData }: { meshData: any }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -60,55 +64,92 @@ function ThreeScene({ meshData }: { meshData: any }) {
     directionalLight.castShadow = true;
     scene.add(directionalLight);
 
-    // Create geometry based on mesh type
-    let geometry: THREE.BufferGeometry;
-    const meshType = meshData.fileName.split('.')[0];
-    
-    switch (meshType) {
-      case 'cube':
-        geometry = new THREE.BoxGeometry(1, 1, 1);
-        break;
-      case 'sphere':
-        geometry = new THREE.SphereGeometry(1, 32, 32);
-        break;
-      case 'cylinder':
-        geometry = new THREE.CylinderGeometry(1, 1, 2, 32);
-        break;
-      case 'plane':
-        geometry = new THREE.PlaneGeometry(2, 2);
-        break;
-      default:
-        geometry = new THREE.BoxGeometry(1, 1, 1);
+    // Load mesh
+    const rawData = atob(meshData.data);
+    const arrayBuffer = new ArrayBuffer(rawData.length);
+    const uint8Array = new Uint8Array(arrayBuffer);
+    for (let i = 0; i < rawData.length; i++) {
+      uint8Array[i] = rawData.charCodeAt(i);
     }
 
-    // Material
-    const material = new THREE.MeshPhongMaterial({
-      color: 0x4f46e5,
-      shininess: 100,
-      transparent: true,
-      opacity: 0.9
-    });
+    let object: THREE.Object3D;
 
-    // Mesh
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
+    try {
+      const material = new THREE.MeshPhongMaterial({
+        color: 0x4f46e5,
+        shininess: 100,
+        transparent: true,
+        opacity: 0.9
+      });
 
-    // Grid helper
-    const gridHelper = new THREE.GridHelper(10, 10, 0x888888, 0xcccccc);
-    scene.add(gridHelper);
-
-    // Animation loop
-    let autoRotate = true;
-    const animate = () => {
-      frameRef.current = requestAnimationFrame(animate);
-      
-      if (autoRotate) {
-        mesh.rotation.x += 0.005;
-        mesh.rotation.y += 0.01;
+      switch (meshData.fileType) {
+        case "obj":
+          object = new OBJLoader().parse(new TextDecoder().decode(uint8Array));
+          // Apply material to all meshes in the group
+          object.traverse(function (child) {
+            if (child instanceof THREE.Mesh) {
+              child.material = material;
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          break;
+        case "stl":
+          const stlGeometry = new STLLoader().parse(arrayBuffer);
+          object = new THREE.Mesh(stlGeometry, material);
+          break;
+        case "ply":
+          const plyGeometry = new PLYLoader().parse(new TextDecoder().decode(uint8Array));
+          object = new THREE.Mesh(plyGeometry, material);
+          break;
+        default:
+          const defaultGeometry = new THREE.BoxGeometry(1, 1, 1);
+          object = new THREE.Mesh(defaultGeometry, material);
       }
       
+      if (!object) {
+        // This will be caught by the try-catch block
+        throw new Error("Parsed object is null or undefined.");
+      }
+
+    } catch (error) {
+      console.error("Failed to parse mesh:", error);
+      const geometry = new THREE.BoxGeometry(1, 1, 1);
+      const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+      object = new THREE.Mesh(geometry, material);
+    }
+
+    // Add the final object to the scene
+    object.castShadow = true;
+    object.receiveShadow = true;
+    scene.add(object);
+
+    // Zoom to fit
+    const box = new THREE.Box3().setFromObject(object);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    const maxSize = Math.max(size.x, size.y, size.z);
+    const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * camera.fov / 360));
+    const fitWidthDistance = fitHeightDistance / camera.aspect;
+    const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
+
+    const direction = camera.position.clone().sub(center).normalize();
+
+    camera.position.copy(direction.multiplyScalar(distance).add(center));
+    camera.near = distance / 100;
+    camera.far = distance * 100;
+    camera.updateProjectionMatrix();
+
+    camera.lookAt(center);
+
+    // Axes helper
+    const axesHelper = new THREE.AxesHelper(5);
+    object.add(axesHelper);
+
+    // Animation loop
+    const animate = () => {
+      frameRef.current = requestAnimationFrame(animate);
       renderer.render(scene, camera);
     };
     animate();
@@ -119,7 +160,6 @@ function ThreeScene({ meshData }: { meshData: any }) {
 
     const handleMouseDown = (event: MouseEvent) => {
       mouseDown = true;
-      autoRotate = false;
       previousMousePosition = { x: event.clientX, y: event.clientY };
     };
 
@@ -135,8 +175,8 @@ function ThreeScene({ meshData }: { meshData: any }) {
         y: event.clientY - previousMousePosition.y
       };
 
-      mesh.rotation.y += deltaMove.x * 0.01;
-      mesh.rotation.x += deltaMove.y * 0.01;
+      object.rotation.y += deltaMove.x * 0.01;
+      object.rotation.x += deltaMove.y * 0.01;
 
       previousMousePosition = { x: event.clientX, y: event.clientY };
     };

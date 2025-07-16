@@ -6,19 +6,24 @@ import MeshViewport from "@/components/mesh-viewport";
 import ChatPanel from "@/components/chat-panel";
 import StatusBar from "@/components/status-bar";
 
+import { type Mesh } from "@shared/schema";
+
 export default function MeshEditor() {
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [currentMesh, setCurrentMesh] = useState<any>(null);
+  const [currentMesh, setCurrentMesh] = useState<Mesh | null>(null);
   const [meshStats, setMeshStats] = useState({ vertices: 0, faces: 0 });
 
-  const handleMeshCreate = (mesh: any) => {
+  const handleMeshCreate = (mesh: Mesh) => {
     console.log('Setting current mesh:', mesh);
     setCurrentMesh(mesh);
   };
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
-      <TopMenu onToggleChat={() => setIsChatOpen(!isChatOpen)} />
+      <TopMenu 
+        onToggleChat={() => setIsChatOpen(!isChatOpen)} 
+        onMeshUpload={setCurrentMesh} 
+      />
       
       <div className="flex-1 flex overflow-hidden">
         <div className="w-80 bg-white border-r border-slate-200 flex flex-col">

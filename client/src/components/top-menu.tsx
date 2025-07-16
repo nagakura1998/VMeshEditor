@@ -15,11 +15,14 @@ import {
   Settings 
 } from "lucide-react";
 
+import { type Mesh } from "@shared/schema";
+
 interface TopMenuProps {
   onToggleChat: () => void;
+  onMeshUpload: (mesh: Mesh) => void;
 }
 
-export default function TopMenu({ onToggleChat }: TopMenuProps) {
+export default function TopMenu({ onToggleChat, onMeshUpload }: TopMenuProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -30,7 +33,10 @@ export default function TopMenu({ onToggleChat }: TopMenuProps) {
         const reader = new FileReader();
         reader.onload = async (e) => {
           try {
-            const base64Data = btoa(e.target?.result as string);
+            const arrayBuffer = e.target?.result as ArrayBuffer;
+            const base64Data = btoa(
+              new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+            );
             const fileType = file.name.split('.').pop()?.toLowerCase();
             
             const response = await apiRequest('POST', '/api/meshes', {
@@ -47,15 +53,16 @@ export default function TopMenu({ onToggleChat }: TopMenuProps) {
           }
         };
         reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file);
       });
     },
-    onSuccess: () => {
+    onSuccess: (newMesh) => {
       queryClient.invalidateQueries({ queryKey: ['/api/meshes'] });
       toast({
         title: "Success",
         description: "Mesh uploaded successfully",
       });
+      onMeshUpload(newMesh);
     },
     onError: () => {
       toast({
@@ -78,7 +85,7 @@ export default function TopMenu({ onToggleChat }: TopMenuProps) {
       <div className="flex items-center space-x-6">
         <div className="flex items-center space-x-3">
           <Box className="text-2xl text-primary" />
-          <h1 className="text-xl font-bold text-slate-800">MeshLab Pro</h1>
+          <h1 className="text-xl font-bold text-slate-800">VMeshEditor</h1>
         </div>
         
         <nav className="flex items-center space-x-1">

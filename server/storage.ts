@@ -44,6 +44,7 @@ export class MemStorage implements IStorage {
       vertices: insertMesh.vertices || 0,
       faces: insertMesh.faces || 0,
       createdAt: new Date(),
+      data: insertMesh.data, // Add this line
     };
     this.meshes.set(id, mesh);
     return mesh;
